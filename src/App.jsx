@@ -17,10 +17,10 @@ import {
 const DEFAULT_SESSION = [12, 8, 19, 4, 27, 31, 0, 22];
 const DEFAULT_HISTORY = [62, 68, 64, 71, 76, 73, 81, 87];
 const DEFAULT_OCR_EVENTS = [
-  { time: "09:12", type: "Shipment", id: "SHP-4821", status: "Recognized", confidence: 94, severity: "normal" },
-  { time: "09:16", type: "Invoice", id: "INV-1048", status: "Processed", confidence: 91, severity: "normal" },
-  { time: "09:21", type: "Barcode", id: "BC-7732", status: "Detected", confidence: 88, severity: "normal" },
-  { time: "09:28", type: "Delivery", id: "DLV-2190", status: "Delay Warning", confidence: 82, severity: "warning" },
+  { time: "09:12", type: "Shipment", id: "SHP-4821", client: "Nordic Freight", route: "Kaunas → Warsaw", eta: "14:30", status: "Recognized", confidence: 94, severity: "normal", risk: "Low" },
+  { time: "09:16", type: "Invoice", id: "INV-1048", client: "Baltic Cargo", route: "Vilnius → Riga", eta: "11:45", status: "Processed", confidence: 91, severity: "normal", risk: "Low" },
+  { time: "09:21", type: "Barcode", id: "BC-7732", client: "TransLine EU", route: "Berlin → Hamburg", eta: "16:10", status: "Detected", confidence: 88, severity: "normal", risk: "Medium" },
+  { time: "09:28", type: "Delivery", id: "DLV-2190", client: "Express Logistics", route: "Madrid → Valencia", eta: "Delayed", status: "Delay Warning", confidence: 82, severity: "warning", risk: "High" },
 ];
 
 const EURO_WHEEL = [
@@ -131,6 +131,8 @@ function randomId(prefix) {
 function makeOcrEvent() {
   const types = ["Shipment", "Invoice", "Barcode", "CMR", "POD", "Warehouse Label", "Delivery Note"];
   const statuses = ["Recognized", "Processed", "Detected", "Classified", "Delay Warning", "Mismatch Alert", "Low Confidence"];
+  const clients = ["Nordic Freight", "Baltic Cargo", "TransLine EU", "Express Logistics", "Iberia Supply", "Warehouse Hub", "FleetOps Group"];
+  const routes = ["Kaunas → Warsaw", "Vilnius → Riga", "Berlin → Hamburg", "Madrid → Valencia", "Barcelona → Zaragoza", "Rotterdam → Bremen", "Paris → Lyon"];
   const type = types[Math.floor(Math.random() * types.length)];
   const status = statuses[Math.floor(Math.random() * statuses.length)];
   const confidence = Math.floor(72 + Math.random() * 27);
@@ -138,9 +140,22 @@ function makeOcrEvent() {
   const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 
   const severity = status.includes("Warning") || status.includes("Alert") || status.includes("Low") ? "warning" : "normal";
+  const risk = severity === "warning" || confidence < 80 ? "High" : confidence < 88 ? "Medium" : "Low";
+  const eta = status.includes("Delay") ? "Delayed" : `${String(10 + Math.floor(Math.random() * 8)).padStart(2, "0")}:${String(Math.floor(Math.random() * 6) * 10).padStart(2, "0")}`;
   const prefix = type === "Shipment" ? "SHP" : type === "Invoice" ? "INV" : type === "Barcode" ? "BC" : type === "CMR" ? "CMR" : type === "POD" ? "POD" : "DOC";
 
-  return { time, type, id: randomId(prefix), status, confidence, severity };
+  return {
+    time,
+    type,
+    id: randomId(prefix),
+    client: clients[Math.floor(Math.random() * clients.length)],
+    route: routes[Math.floor(Math.random() * routes.length)],
+    eta,
+    status,
+    confidence,
+    severity,
+    risk,
+  };
 }
 
 export default function App() {
@@ -288,6 +303,23 @@ export default function App() {
     addFeed("OCR monitor cleared");
   };
 
+  const exportOcrReport = () => {
+    const headers = ["time", "type", "id", "client", "route", "eta", "status", "confidence", "risk"];
+    const rows = ocrEvents.map((event) =>
+      headers.map((key) => String(event[key] ?? "").replaceAll(",", " ")).join(",")
+    );
+    const csv = [headers.join(","), ...rows].join("
+");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "ocr-logistics-report.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    addFeed("OCR logistics report exported");
+  };
+
   return (
     <div className="min-h-screen bg-[#020817] text-white px-6 py-10">
       <div className="max-w-7xl mx-auto">
@@ -334,6 +366,7 @@ export default function App() {
             ocrTypeData={ocrTypeData}
             simulateOcrScan={simulateOcrScan}
             clearOcrData={clearOcrData}
+            exportOcrReport={exportOcrReport}
             latestOcrConfidence={latestOcrConfidence}
             activeAlerts={activeAlerts}
             processedDocs={processedDocs}
@@ -490,32 +523,67 @@ function RouletteModule({ strategyA, strategyB, rouletteInput, setRouletteInput,
   );
 }
 
-function OcrOperationsMonitor({ ocrEvents, ocrChartData, ocrTypeData, simulateOcrScan, clearOcrData, latestOcrConfidence, activeAlerts, processedDocs, avgOcrConfidence }) {
+function OcrOperationsMonitor({
+  ocrEvents,
+  ocrChartData,
+  ocrTypeData,
+  simulateOcrScan,
+  clearOcrData,
+  exportOcrReport,
+  latestOcrConfidence,
+  activeAlerts,
+  processedDocs,
+  avgOcrConfidence,
+}) {
+  const [filter, setFilter] = useState("all");
+
+  const filteredEvents = ocrEvents.filter((event) => {
+    if (filter === "all") return true;
+    if (filter === "warnings") return event.severity === "warning";
+    if (filter === "processed") return event.severity !== "warning";
+    return true;
+  });
+
+  const delayedShipments = ocrEvents.filter((event) => event.eta === "Delayed" || event.status.includes("Delay")).length;
+  const processedInvoices = ocrEvents.filter((event) => event.type === "Invoice").length;
+  const barcodeReads = ocrEvents.filter((event) => event.type === "Barcode" || event.type === "Warehouse Label").length;
+
   return (
     <div className="space-y-6">
       <div className="grid md:grid-cols-4 gap-5">
         <MetricCard title="OCR Confidence" value={`${latestOcrConfidence}%`} subtitle="Latest detection confidence" />
-        <MetricCard title="Documents Processed" value={processedDocs} subtitle="Simulated OCR events" />
-        <MetricCard title="Active Alerts" value={activeAlerts} subtitle="Warnings and anomalies" />
+        <MetricCard title="Documents Processed" value={processedDocs} subtitle="Simulated logistics events" />
+        <MetricCard title="Delayed Shipments" value={delayedShipments} subtitle="Detected ETA risks" />
         <MetricCard title="Average Accuracy" value={`${avgOcrConfidence}%`} subtitle="Across captured events" />
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-5">
+        <MetricCard title="Processed Invoices" value={processedInvoices} subtitle="Invoice OCR queue" />
+        <MetricCard title="Barcode Reads" value={barcodeReads} subtitle="Warehouse scan events" />
+        <MetricCard title="Active Alerts" value={activeAlerts} subtitle="Warnings and anomalies" />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-[#08152b] border border-slate-800 rounded-3xl p-6">
-          <h2 className="text-3xl font-bold">OCR Operations Monitor</h2>
-          <p className="text-slate-400 mt-2">Simulated logistics OCR pipeline for shipments, invoices, barcodes, CMR, POD and warehouse labels.</p>
+          <div className="text-cyan-400 text-sm tracking-[0.25em] uppercase mb-3">Logistics OCR Operations</div>
+          <h2 className="text-3xl font-bold">Shipment, Invoice & Warehouse OCR Monitor</h2>
+          <p className="text-slate-400 mt-2">
+            Simulated OCR pipeline for transport documents, shipment IDs, invoices, barcodes, CMR, POD and warehouse labels.
+          </p>
           <div className="flex flex-wrap gap-3 mt-8">
             <button onClick={simulateOcrScan} className="bg-cyan-500 hover:bg-cyan-400 transition px-6 py-4 rounded-2xl font-semibold text-black">Simulate OCR Scan</button>
+            <button onClick={exportOcrReport} className="bg-emerald-500 hover:bg-emerald-400 transition px-6 py-4 rounded-2xl font-semibold text-black">Export OCR Report</button>
             <button onClick={clearOcrData} className="bg-rose-900/50 border border-rose-500/30 hover:bg-rose-800/50 transition px-6 py-4 rounded-2xl">Clear OCR Data</button>
           </div>
         </div>
+
         <div className="bg-[#08152b] border border-slate-800 rounded-3xl p-6">
           <h2 className="text-3xl font-bold">AI Pipeline Status</h2>
           <div className="space-y-3 mt-6">
             <StatusPill label="OCR Engine" value="ONLINE" color="emerald" />
             <StatusPill label="Auto Classification" value="ACTIVE" color="cyan" />
-            <StatusPill label="Anomaly Detection" value="ENABLED" color="orange" />
-            <StatusPill label="Data Export" value="READY" color="violet" />
+            <StatusPill label="Risk Detection" value="ENABLED" color="orange" />
+            <StatusPill label="CSV Export" value="READY" color="violet" />
           </div>
         </div>
       </div>
@@ -526,26 +594,45 @@ function OcrOperationsMonitor({ ocrEvents, ocrChartData, ocrTypeData, simulateOc
       </div>
 
       <div className="bg-[#08152b] border border-slate-800 rounded-3xl p-6">
-        <h2 className="text-3xl font-bold mb-5">Live Detection Table</h2>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+          <div>
+            <h2 className="text-3xl font-bold">Processed Logistics Events</h2>
+            <p className="text-slate-400 mt-2">Route, client, ETA, risk and OCR confidence overview.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <FilterButton active={filter === "all"} onClick={() => setFilter("all")}>All</FilterButton>
+            <FilterButton active={filter === "warnings"} onClick={() => setFilter("warnings")}>Warnings</FilterButton>
+            <FilterButton active={filter === "processed"} onClick={() => setFilter("processed")}>Processed</FilterButton>
+          </div>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="text-slate-400 border-b border-slate-800">
                 <th className="py-3 px-3">Time</th>
-                <th className="py-3 px-3">Document Type</th>
+                <th className="py-3 px-3">Type</th>
                 <th className="py-3 px-3">ID</th>
+                <th className="py-3 px-3">Client</th>
+                <th className="py-3 px-3">Route</th>
+                <th className="py-3 px-3">ETA</th>
                 <th className="py-3 px-3">Status</th>
                 <th className="py-3 px-3">Confidence</th>
+                <th className="py-3 px-3">Risk</th>
               </tr>
             </thead>
             <tbody>
-              {ocrEvents.map((event, index) => (
+              {filteredEvents.map((event, index) => (
                 <tr key={`${event.id}-${index}`} className="border-b border-slate-900 hover:bg-slate-900/40">
                   <td className="py-3 px-3 text-slate-300">{event.time}</td>
                   <td className="py-3 px-3 font-bold">{event.type}</td>
                   <td className="py-3 px-3 text-cyan-300">{event.id}</td>
+                  <td className="py-3 px-3 text-slate-300">{event.client ?? "-"}</td>
+                  <td className="py-3 px-3 text-slate-300">{event.route ?? "-"}</td>
+                  <td className={`py-3 px-3 font-bold ${event.eta === "Delayed" ? "text-orange-300" : "text-slate-300"}`}>{event.eta ?? "-"}</td>
                   <td className={`py-3 px-3 font-bold ${event.severity === "warning" ? "text-orange-300" : "text-emerald-300"}`}>{event.status}</td>
                   <td className="py-3 px-3">{event.confidence}%</td>
+                  <td className={`py-3 px-3 font-black ${event.risk === "High" ? "text-rose-300" : event.risk === "Medium" ? "text-orange-300" : "text-emerald-300"}`}>{event.risk ?? "Low"}</td>
                 </tr>
               ))}
             </tbody>
