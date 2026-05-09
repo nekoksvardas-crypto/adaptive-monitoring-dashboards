@@ -145,6 +145,9 @@ export default function App() {
   const [strategyA, setStrategyA] = useState(() => createStrategy(0, "0 → 36"));
   const [strategyB, setStrategyB] = useState(() => createStrategy(36, "36 → 0"));
   const [spinCount, setSpinCount] = useState(0);
+  const [dailyHistory, setDailyHistory] = useState(() =>
+    safeLoadArray("daily-performance-history", [])
+  );
 
   const baseBet = 0.01;
 
@@ -155,6 +158,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("monitoring-history", JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    localStorage.setItem("daily-performance-history", JSON.stringify(dailyHistory));
+  }, [dailyHistory]);
 
   const stats = useMemo(() => {
     return {
@@ -182,6 +189,17 @@ export default function App() {
   });
 
   const combinedPL = Number((strategyA.balance + strategyB.balance - 200).toFixed(2));
+  const dailyChartData = dailyHistory.map((day, index) => ({
+    id: index + 1,
+    value: day.cumulative,
+    daily: day.pl,
+    date: day.date,
+  }));
+  const totalDailyPL = Number(dailyHistory.reduce((sum, day) => sum + day.pl, 0).toFixed(2));
+  const winDays = dailyHistory.filter((day) => day.pl > 0).length;
+  const lossDays = dailyHistory.filter((day) => day.pl < 0).length;
+  const bestDay = dailyHistory.length ? Math.max(...dailyHistory.map((day) => day.pl)) : 0;
+  const worstDay = dailyHistory.length ? Math.min(...dailyHistory.map((day) => day.pl)) : 0;
   const totalWins = strategyA.wins + strategyB.wins;
   const totalLosses = strategyA.losses + strategyB.losses;
   const combinedWinRate =
@@ -230,6 +248,30 @@ export default function App() {
     setRouletteInput("");
   };
 
+  const closeDay = () => {
+    const today = new Date().toLocaleDateString("en-GB");
+    const previousCumulative = dailyHistory.length
+      ? dailyHistory[dailyHistory.length - 1].cumulative
+      : 0;
+    const dayRecord = {
+      date: today,
+      pl: combinedPL,
+      cumulative: Number((previousCumulative + combinedPL).toFixed(2)),
+      spins: spinCount,
+    };
+
+    setDailyHistory((prev) => [...prev, dayRecord]);
+    setStrategyA(createStrategy(0, "0 → 36"));
+    setStrategyB(createStrategy(36, "36 → 0"));
+    setSpinCount(0);
+    addFeed(`Day closed and saved: ${combinedPL >= 0 ? "+" : ""}${combinedPL.toFixed(2)} P/L`);
+  };
+
+  const clearDailyHistory = () => {
+    setDailyHistory([]);
+    addFeed("Daily performance history cleared");
+  };
+
   const resetRoulette = () => {
     setStrategyA(createStrategy(0, "0 → 36"));
     setStrategyB(createStrategy(36, "36 → 0"));
@@ -252,57 +294,27 @@ export default function App() {
         </div>
 
         {activeTab === "dashboard" ? (
-          <>
-            <div className="grid md:grid-cols-4 gap-5 mt-10">
-              <MetricCard title="Live Signal Strength" value="87%" subtitle="Adaptive confidence engine" />
-              <MetricCard title="Events Tracked" value={sessionItems.length} subtitle="Manual + simulated inputs" />
-              <MetricCard title="OCR Event Feed" value="READY" subtitle="Prepared for screen recognition" />
-              <MetricCard title="Workflow Sync" value="96%" subtitle="Session stability tracking" />
-            </div>
-
-            <div className="grid lg:grid-cols-3 gap-6 mt-8">
-              <div className="lg:col-span-2 bg-[#08152b] border border-slate-800 rounded-3xl p-6">
-                <h2 className="text-3xl font-bold">Manual Input Panel</h2>
-                <p className="text-slate-400 mt-2">Enter values from 0 to 36.</p>
-                <div className="flex flex-wrap gap-3 mt-8">
-                  <input
-                    type="number"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && addEvent()}
-                    placeholder="Enter event value 0-36"
-                    className="bg-[#020817] border border-slate-700 rounded-2xl px-5 py-4 flex-1 min-w-[220px] outline-none"
-                  />
-                  <button onClick={addEvent} className="bg-emerald-500 hover:bg-emerald-400 transition px-6 py-4 rounded-2xl font-semibold text-black">
-                    Add Event
-                  </button>
-                  <button onClick={() => setSessionItems((prev) => prev.slice(0, -1))} className="bg-slate-700 hover:bg-slate-600 transition px-6 py-4 rounded-2xl">
-                    Undo
-                  </button>
-                  <button onClick={() => { setSessionItems([]); setHistory(DEFAULT_HISTORY); }} className="bg-rose-900/50 border border-rose-500/30 hover:bg-rose-800/50 transition px-6 py-4 rounded-2xl">
-                    Reset
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-[#08152b] border border-slate-800 rounded-3xl p-6">
-                <h2 className="text-3xl font-bold">Session Stats</h2>
-                <div className="grid grid-cols-2 gap-4 mt-6">
-                  <StatBox label="Low" value={stats.low} />
-                  <StatBox label="High" value={stats.high} />
-                  <StatBox label="Even" value={stats.even} />
-                  <StatBox label="Odd" value={stats.odd} />
-                  <StatBox label="Zero" value={stats.zero} />
-                  <StatBox label="Total" value={stats.total} />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid lg:grid-cols-3 gap-6 mt-8">
-              <AnalyticsChart title="Live Signal Analytics" subtitle="Real-time adaptive monitoring visualization." data={chartData} />
-              <EventFeed events={events} />
-            </div>
-          </>
+          <MainDashboard
+            sessionItems={sessionItems}
+            stats={stats}
+            chartData={chartData}
+            events={events}
+            inputValue={inputValue}
+            setInputValue={setInputValue}
+            addEvent={addEvent}
+            setSessionItems={setSessionItems}
+            setHistory={setHistory}
+            dailyHistory={dailyHistory}
+            dailyChartData={dailyChartData}
+            totalDailyPL={totalDailyPL}
+            winDays={winDays}
+            lossDays={lossDays}
+            bestDay={bestDay}
+            worstDay={worstDay}
+            currentSessionPL={combinedPL}
+            closeDay={closeDay}
+            clearDailyHistory={clearDailyHistory}
+          />
         ) : (
           <RouletteModule
             strategyA={strategyA}
@@ -321,6 +333,92 @@ export default function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function MainDashboard({
+  sessionItems,
+  stats,
+  chartData,
+  events,
+  inputValue,
+  setInputValue,
+  addEvent,
+  setSessionItems,
+  setHistory,
+  dailyHistory,
+  dailyChartData,
+  totalDailyPL,
+  winDays,
+  lossDays,
+  bestDay,
+  worstDay,
+  currentSessionPL,
+  closeDay,
+  clearDailyHistory,
+}) {
+  return (
+    <>
+      <div className="grid md:grid-cols-4 gap-5 mt-10">
+        <MetricCard title="Current Session P/L" value={`${currentSessionPL >= 0 ? "+" : ""}${currentSessionPL.toFixed(2)}`} subtitle="Pulled from strategy module" />
+        <MetricCard title="Total Saved P/L" value={`${totalDailyPL >= 0 ? "+" : ""}${totalDailyPL.toFixed(2)}`} subtitle="All closed days" />
+        <MetricCard title="Win / Loss Days" value={`${winDays}/${lossDays}`} subtitle="Positive vs negative days" />
+        <MetricCard title="Best / Worst Day" value={`${bestDay >= 0 ? "+" : ""}${bestDay.toFixed(2)} / ${worstDay >= 0 ? "+" : ""}${worstDay.toFixed(2)}`} subtitle="Daily performance range" />
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6 mt-8">
+        <div className="lg:col-span-2 bg-[#08152b] border border-slate-800 rounded-3xl p-6">
+          <h2 className="text-3xl font-bold">Daily Performance Control</h2>
+          <p className="text-slate-400 mt-2">
+            The dashboard automatically reads the current P/L from the strategy module. Close the day to save it into the long-term history.
+          </p>
+          <div className="flex flex-wrap gap-3 mt-8">
+            <button onClick={closeDay} className="bg-emerald-500 hover:bg-emerald-400 transition px-6 py-4 rounded-2xl font-semibold text-black">
+              Close Day / Save P&L
+            </button>
+            <button onClick={clearDailyHistory} className="bg-rose-900/50 border border-rose-500/30 hover:bg-rose-800/50 transition px-6 py-4 rounded-2xl">
+              Clear Daily History
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-[#08152b] border border-slate-800 rounded-3xl p-6">
+          <h2 className="text-3xl font-bold">Session Stats</h2>
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <StatBox label="Low" value={stats.low} />
+            <StatBox label="High" value={stats.high} />
+            <StatBox label="Even" value={stats.even} />
+            <StatBox label="Odd" value={stats.odd} />
+            <StatBox label="Zero" value={stats.zero} />
+            <StatBox label="Total" value={stats.total} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6 mt-8">
+        <DailyPerformanceChart data={dailyChartData} />
+        <EventFeed events={events} />
+      </div>
+
+      <div className="bg-[#08152b] border border-slate-800 rounded-3xl p-6 mt-8">
+        <h2 className="text-3xl font-bold mb-5">Daily History</h2>
+        {dailyHistory.length === 0 ? (
+          <p className="text-slate-500">No closed days yet. Use the strategy module, then press Close Day / Save P&L.</p>
+        ) : (
+          <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
+            {dailyHistory.map((day, index) => (
+              <div key={`${day.date}-${index}`} className="bg-[#0d1524] border border-slate-800 rounded-2xl p-4">
+                <div className="text-slate-500 text-sm">Day {index + 1} · {day.date}</div>
+                <div className={`text-3xl font-black mt-2 ${day.pl >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                  {day.pl >= 0 ? "+" : ""}{day.pl.toFixed(2)}
+                </div>
+                <div className="text-slate-500 text-sm mt-2">Cumulative: {day.cumulative >= 0 ? "+" : ""}{day.cumulative.toFixed(2)} · Spins: {day.spins}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -527,6 +625,44 @@ function AnalyticsChart({ title, subtitle, data }) {
             <YAxis stroke="#64748b" />
             <Tooltip />
             <Area type="monotone" dataKey="value" stroke="#06b6d4" fillOpacity={1} fill="url(#colorValue)" strokeWidth={4} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function DailyPerformanceChart({ data }) {
+  const fallbackData = data.length ? data : [{ id: 1, value: 0, daily: 0, date: "No data" }];
+
+  return (
+    <div className="lg:col-span-2 bg-[#08152b] border border-slate-800 rounded-3xl p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-3xl font-bold">All-Time Daily P/L Analytics</h2>
+          <p className="text-slate-400 mt-2">Cumulative performance from closed days.</p>
+        </div>
+        <div className="bg-cyan-500/10 border border-cyan-500/30 px-4 py-2 rounded-xl text-cyan-400 text-sm">DAILY TRACKING</div>
+      </div>
+      <div className="h-[350px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={fallbackData}>
+            <defs>
+              <linearGradient id="dailyPL" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.45} />
+                <stop offset="95%" stopColor="#22d3ee" stopOpacity={0.03} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+            <XAxis dataKey="id" stroke="#64748b" />
+            <YAxis stroke="#64748b" tickFormatter={(value) => `${value > 0 ? "+" : ""}${value}`} />
+            <Tooltip
+              contentStyle={{ background: "#020817", border: "1px solid #334155", borderRadius: "14px", color: "#fff" }}
+              formatter={(value, name) => [`${value > 0 ? "+" : ""}${Number(value).toFixed(2)}`, name === "value" ? "Cumulative P/L" : "Daily P/L"]}
+              labelFormatter={(label) => `Day ${label}`}
+            />
+            <ReferenceLine y={0} stroke="#cbd5e1" strokeDasharray="6 6" opacity={0.7} />
+            <Area type="monotone" dataKey="value" stroke="#22d3ee" fill="url(#dailyPL)" strokeWidth={4} dot={false} activeDot={false} />
           </AreaChart>
         </ResponsiveContainer>
       </div>
