@@ -159,6 +159,9 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [selectedLoad, setSelectedLoad] = useState(initialLoads[0]);
   const [toast, setToast] = useState("Fleet delay assistant ready");
+  const [driverPhone, setDriverPhone] = useState("+37060000000");
+  const [reminderTime, setReminderTime] = useState("");
+  const [scheduledReminder, setScheduledReminder] = useState(null);
 
   const filteredLoads = useMemo(() => {
     return loads.filter((load) => {
@@ -209,7 +212,8 @@ export default function App() {
       load.contacted ? "Yes" : "No",
       load.client,
     ].join(","));
-    const csv = [headers.join(","), ...rows].join("\n");
+    const csv = [headers.join(","), ...rows].join("
+");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -219,6 +223,65 @@ export default function App() {
     URL.revokeObjectURL(url);
     setToast("Dispatcher report exported");
   };
+
+  const scheduleReminder = () => {
+    if (!selectedLoad || !reminderTime) {
+      setToast("Select a load and reminder time first");
+      return;
+    }
+
+    const now = new Date();
+    const [hours, minutes] = reminderTime.split(":").map(Number);
+    const reminderDate = new Date();
+    reminderDate.setHours(hours, minutes, 0, 0);
+
+    if (reminderDate <= now) {
+      reminderDate.setDate(reminderDate.getDate() + 1);
+    }
+
+    const delay = reminderDate.getTime() - now.getTime();
+    const message = makeMessage(selectedLoad);
+
+    const reminder = {
+      loadId: selectedLoad.id,
+      driver: selectedLoad.driver,
+      phone: driverPhone,
+      time: reminderTime,
+      message,
+    };
+
+    setScheduledReminder(reminder);
+    setToast(`Reminder scheduled for ${selectedLoad.driver} at ${reminderTime}`);
+
+    setTimeout(() => {
+      setToast(`Reminder due: contact ${selectedLoad.driver} for ${selectedLoad.id}`);
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("Fleet Reminder", {
+          body: `Contact ${selectedLoad.driver}: ${selectedLoad.id}`,
+        });
+      } else {
+        alert(`Fleet Reminder
+
+${message}`);
+      }
+    }, delay);
+  };
+
+  const requestNotifications = async () => {
+    if (!("Notification" in window)) {
+      setToast("Browser notifications are not supported here");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setToast(permission === "granted" ? "Browser notifications enabled" : "Notifications not enabled");
+  };
+
+  const openWhatsApp = () => {
+    if (!selectedLoad) return;
+    const cleanPhone = driverPhone.replace(/[^0-9]/g, "");
+    const message = encodeURIComponent(makeMessage(selectedLoad));
+    window.open(`https://wa.me/${cleanPhone}?text=${message}`, "_blank");
+  }; 
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -286,7 +349,18 @@ export default function App() {
             />
 
             <aside className="space-y-5">
-              <ActionPanel load={selectedLoad} markContacted={markContacted} />
+              <ActionPanel
+                load={selectedLoad}
+                markContacted={markContacted}
+                driverPhone={driverPhone}
+                setDriverPhone={setDriverPhone}
+                reminderTime={reminderTime}
+                setReminderTime={setReminderTime}
+                scheduleReminder={scheduleReminder}
+                requestNotifications={requestNotifications}
+                openWhatsApp={openWhatsApp}
+                scheduledReminder={scheduledReminder}
+              />
               <PriorityQueue loads={loads} setSelectedLoad={setSelectedLoad} />
             </aside>
           </section>
@@ -375,7 +449,18 @@ function LoadsPanel({ loads, activeFilter, setActiveFilter, search, setSearch, s
   );
 }
 
-function ActionPanel({ load, markContacted }) {
+function ActionPanel({
+  load,
+  markContacted,
+  driverPhone,
+  setDriverPhone,
+  reminderTime,
+  setReminderTime,
+  scheduleReminder,
+  requestNotifications,
+  openWhatsApp,
+  scheduledReminder,
+}) {
   if (!load) return null;
   const message = makeMessage(load);
   const copyMessage = async () => {
@@ -401,9 +486,36 @@ function ActionPanel({ load, markContacted }) {
         <p className="text-slate-700 text-sm leading-relaxed">{message}</p>
       </div>
 
+      <div className="mt-5 grid grid-cols-1 gap-3">
+        <label className="text-sm font-bold text-slate-600">Driver phone number</label>
+        <input
+          value={driverPhone}
+          onChange={(e) => setDriverPhone(e.target.value)}
+          placeholder="+37060000000"
+          className="h-11 rounded-xl border border-slate-200 px-4 outline-none focus:ring-2 focus:ring-blue-100"
+        />
+
+        <label className="text-sm font-bold text-slate-600">Reminder time</label>
+        <input
+          type="time"
+          value={reminderTime}
+          onChange={(e) => setReminderTime(e.target.value)}
+          className="h-11 rounded-xl border border-slate-200 px-4 outline-none focus:ring-2 focus:ring-blue-100"
+        />
+      </div>
+
+      {scheduledReminder && scheduledReminder.loadId === load.id && (
+        <div className="mt-4 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl p-3 text-sm font-semibold">
+          Reminder scheduled at {scheduledReminder.time} for {scheduledReminder.driver}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 mt-4">
         <button onClick={copyMessage} className="h-11 rounded-xl border border-slate-200 font-bold hover:bg-slate-50">Copy Message</button>
-        <button onClick={() => markContacted(load.id)} className="h-11 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700">Mark Contacted</button>
+        <button onClick={openWhatsApp} className="h-11 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700">Open WhatsApp</button>
+        <button onClick={requestNotifications} className="h-11 rounded-xl border border-slate-200 font-bold hover:bg-slate-50">Enable Alerts</button>
+        <button onClick={scheduleReminder} className="h-11 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700">Schedule Reminder</button>
+        <button onClick={() => markContacted(load.id)} className="col-span-2 h-11 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800">Mark Contacted</button>
       </div>
     </section>
   );
