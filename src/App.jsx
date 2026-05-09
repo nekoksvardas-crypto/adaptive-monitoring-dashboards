@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
 
 const DEFAULT_SESSION = [12, 8, 19, 4, 27, 31, 0, 22];
@@ -322,7 +323,7 @@ function RouletteModule({ strategyA, strategyB, rouletteInput, setRouletteInput,
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-3xl font-bold">Combined Strategy P/L Curve</h2>
-            <p className="text-slate-400 mt-2">One shared profit/loss curve. It moves up after wins and down after losses.</p>
+            <p className="text-slate-400 mt-2">One shared profit/loss curve from the zero line. Wins push it up, losses push it down.</p>
           </div>
           <div className="bg-cyan-500/10 border border-cyan-500/30 px-4 py-2 rounded-xl text-cyan-400 text-sm">LIVE MODULE</div>
         </div>
@@ -337,8 +338,16 @@ function RouletteModule({ strategyA, strategyB, rouletteInput, setRouletteInput,
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="id" stroke="#64748b" />
-              <YAxis stroke="#64748b" domain={["auto", "auto"]} />
-              <Tooltip />
+              <YAxis
+                stroke="#64748b"
+                domain={[(dataMin) => Math.min(-1, Math.floor(dataMin - 1)), (dataMax) => Math.max(1, Math.ceil(dataMax + 1))]}
+                tickFormatter={(value) => `${value > 0 ? "+" : ""}${value}`}
+              />
+              <Tooltip
+                formatter={(value) => [`${value > 0 ? "+" : ""}${Number(value).toFixed(2)} P/L`, "Combined P/L"]}
+                labelFormatter={(label) => `Spin ${label}`}
+              />
+              <ReferenceLine y={0} stroke="#94a3b8" strokeDasharray="6 6" />
               <Area
                 type="monotone"
                 dataKey="value"
