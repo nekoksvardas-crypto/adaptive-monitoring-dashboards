@@ -259,9 +259,7 @@ export default function App() {
           body: `Contact ${selectedLoad.driver}: ${selectedLoad.id}`,
         });
       } else {
-        alert(`Fleet Reminder
-
-${message}`);
+        alert(`Fleet Reminder\n\n${message}`);
       }
     }, delay);
   };
@@ -280,7 +278,34 @@ ${message}`);
     const cleanPhone = driverPhone.replace(/[^0-9]/g, "");
     const message = encodeURIComponent(makeMessage(selectedLoad));
     window.open(`https://wa.me/${cleanPhone}?text=${message}`, "_blank");
-  }; 
+  };
+
+  const sendWhatsAppNow = async () => {
+    if (!selectedLoad) return;
+
+    try {
+      const response = await fetch("/api/send-whatsapp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          to: driverPhone,
+          message: makeMessage(selectedLoad),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setToast("WhatsApp message sent via Twilio");
+      } else {
+        setToast(`Twilio error: ${data.error}`);
+      }
+    } catch (error) {
+      setToast("Failed to send WhatsApp message");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -358,6 +383,7 @@ ${message}`);
                 scheduleReminder={scheduleReminder}
                 requestNotifications={requestNotifications}
                 openWhatsApp={openWhatsApp}
+                sendWhatsAppNow={sendWhatsAppNow}
                 scheduledReminder={scheduledReminder}
               />
               <PriorityQueue loads={loads} setSelectedLoad={setSelectedLoad} />
@@ -458,6 +484,7 @@ function ActionPanel({
   scheduleReminder,
   requestNotifications,
   openWhatsApp,
+  sendWhatsAppNow,
   scheduledReminder,
 }) {
   if (!load) return null;
@@ -512,6 +539,7 @@ function ActionPanel({
       <div className="grid grid-cols-2 gap-3 mt-4">
         <button onClick={copyMessage} className="h-11 rounded-xl border border-slate-200 font-bold hover:bg-slate-50">Copy Message</button>
         <button onClick={openWhatsApp} className="h-11 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700">Open WhatsApp</button>
+        <button onClick={sendWhatsAppNow} className="h-11 rounded-xl bg-green-600 text-white font-bold hover:bg-green-700">Send via Twilio</button>
         <button onClick={requestNotifications} className="h-11 rounded-xl border border-slate-200 font-bold hover:bg-slate-50">Enable Alerts</button>
         <button onClick={scheduleReminder} className="h-11 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700">Schedule Reminder</button>
         <button onClick={() => markContacted(load.id)} className="col-span-2 h-11 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800">Mark Contacted</button>
