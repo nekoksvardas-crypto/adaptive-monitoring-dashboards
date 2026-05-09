@@ -142,11 +142,16 @@ export default function App() {
   }, [sessionItems]);
 
   const chartData = history.map((value, index) => ({ id: index + 1, value }));
-  const rouletteChartData = strategyA.balances.map((value, index) => ({
-    id: index + 1,
-    a: value,
-    b: strategyB.balances[index] ?? strategyB.balances[strategyB.balances.length - 1],
-  }));
+  const rouletteChartData = strategyA.balances.map((value, index) => {
+    const a = value;
+    const b = strategyB.balances[index] ?? strategyB.balances[strategyB.balances.length - 1];
+    const combinedProfitLoss = Number((a + b - 200).toFixed(4));
+
+    return {
+      id: index + 1,
+      value: combinedProfitLoss,
+    };
+  });
 
   const addFeed = (message) => setEvents((prev) => [message, ...prev.slice(0, 4)]);
 
@@ -316,21 +321,34 @@ function RouletteModule({ strategyA, strategyB, rouletteInput, setRouletteInput,
       <div className="bg-[#08152b] border border-slate-800 rounded-3xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-3xl font-bold">Balance Progression</h2>
-            <p className="text-slate-400 mt-2">Tracks both strategy directions over time.</p>
+            <h2 className="text-3xl font-bold">Combined Strategy P/L Curve</h2>
+            <p className="text-slate-400 mt-2">One shared profit/loss curve. It moves up after wins and down after losses.</p>
           </div>
           <div className="bg-cyan-500/10 border border-cyan-500/30 px-4 py-2 rounded-xl text-cyan-400 text-sm">LIVE MODULE</div>
         </div>
         <div className="h-[380px]">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={rouletteChartData}>
+            <AreaChart data={rouletteChartData}>
+              <defs>
+                <linearGradient id="rouletteCurve" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.75} />
+                  <stop offset="95%" stopColor="#22d3ee" stopOpacity={0} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="id" stroke="#64748b" />
-              <YAxis stroke="#64748b" />
+              <YAxis stroke="#64748b" domain={["auto", "auto"]} />
               <Tooltip />
-              <Line type="monotone" dataKey="a" stroke="#22d3ee" strokeWidth={4} dot={false} name="0 → 36" />
-              <Line type="monotone" dataKey="b" stroke="#fb7185" strokeWidth={4} dot={false} name="36 → 0" />
-            </LineChart>
+              <Area
+                type="monotone"
+                dataKey="value"
+                stroke="#22d3ee"
+                fill="url(#rouletteCurve)"
+                strokeWidth={4}
+                fillOpacity={1}
+                name="Combined P/L"
+              />
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       </div>
