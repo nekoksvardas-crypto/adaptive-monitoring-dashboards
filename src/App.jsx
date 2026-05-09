@@ -8,6 +8,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  AreaChart,
+  Area,
 } from "recharts";
 
 const DEFAULT_SESSION = [12, 8, 19, 4, 27, 31, 0, 22];
@@ -23,7 +25,7 @@ const safeLoadArray = (key, fallback) => {
   }
 };
 
-export default function RealtimeMonitoringSignalDashboard() {
+export default function App() {
   const [inputValue, setInputValue] = useState("");
 
   const [sessionItems, setSessionItems] = useState(() =>
@@ -153,7 +155,8 @@ export default function RealtimeMonitoringSignalDashboard() {
 
   return (
     <div className="min-h-screen bg-[#020817] text-white px-6 py-10">
-      <div className="max-w-6xl mx-auto">
+
+      <div className="max-w-7xl mx-auto">
 
         <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
 
@@ -174,10 +177,12 @@ export default function RealtimeMonitoringSignalDashboard() {
           </div>
 
           <div className="flex flex-col gap-4">
+
             <div className="flex gap-3">
+
               <button
                 onClick={simulateEvent}
-                className="bg-cyan-500 hover:bg-cyan-400 transition px-6 py-3 rounded-2xl font-semibold"
+                className="bg-cyan-500 hover:bg-cyan-400 transition px-6 py-3 rounded-2xl font-semibold text-black"
               >
                 Simulate Event
               </button>
@@ -188,6 +193,7 @@ export default function RealtimeMonitoringSignalDashboard() {
               >
                 Export CSV
               </button>
+
             </div>
 
             <div className="bg-emerald-500/10 border border-emerald-500/30 px-5 py-4 rounded-2xl">
@@ -199,10 +205,12 @@ export default function RealtimeMonitoringSignalDashboard() {
                 ONLINE
               </div>
             </div>
+
           </div>
         </div>
 
         <div className="grid md:grid-cols-4 gap-5 mt-10">
+
           <MetricCard
             title="Live Signal Strength"
             value="87%"
@@ -226,6 +234,7 @@ export default function RealtimeMonitoringSignalDashboard() {
             value="96%"
             subtitle="Session stability tracking"
           />
+
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6 mt-8">
@@ -237,9 +246,7 @@ export default function RealtimeMonitoringSignalDashboard() {
             </h2>
 
             <p className="text-slate-400 mt-2">
-              Enter values from 0 to 36. The dashboard
-              recalculates metrics and updates the session
-              automatically.
+              Enter values from 0 to 36.
             </p>
 
             <div className="flex flex-wrap gap-3 mt-8">
@@ -256,7 +263,7 @@ export default function RealtimeMonitoringSignalDashboard() {
 
               <button
                 onClick={addEvent}
-                className="bg-emerald-500 hover:bg-emerald-400 transition px-6 py-4 rounded-2xl font-semibold"
+                className="bg-emerald-500 hover:bg-emerald-400 transition px-6 py-4 rounded-2xl font-semibold text-black"
               >
                 Add Event
               </button>
@@ -274,21 +281,25 @@ export default function RealtimeMonitoringSignalDashboard() {
               >
                 Reset
               </button>
+
             </div>
           </div>
 
           <div className="bg-[#08152b] border border-slate-800 rounded-3xl p-6">
+
             <h2 className="text-3xl font-bold">
               Session Stats
             </h2>
 
             <div className="grid grid-cols-2 gap-4 mt-6">
+
               <StatBox label="Low" value={stats.low} />
               <StatBox label="High" value={stats.high} />
               <StatBox label="Even" value={stats.even} />
               <StatBox label="Odd" value={stats.odd} />
               <StatBox label="Zero" value={stats.zero} />
               <StatBox label="Total" value={stats.total} />
+
             </div>
           </div>
         </div>
@@ -312,13 +323,21 @@ export default function RealtimeMonitoringSignalDashboard() {
               <div className="bg-cyan-500/10 border border-cyan-500/30 px-4 py-2 rounded-xl text-cyan-400 text-sm">
                 LIVE TRACKING
               </div>
+
             </div>
 
             <div className="h-[350px]">
 
               <ResponsiveContainer width="100%" height="100%">
 
-                <LineChart data={chartData}>
+                <AreaChart data={chartData}>
+
+                  <defs>
+                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#06b6d4" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
 
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -334,15 +353,24 @@ export default function RealtimeMonitoringSignalDashboard() {
 
                   <Tooltip />
 
-                  <Line
+                  <Area
                     type="monotone"
                     dataKey="value"
                     stroke="#06b6d4"
+                    fillOpacity={1}
+                    fill="url(#colorValue)"
                     strokeWidth={4}
+                  />
+
+                  <Line
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#67e8f9"
+                    strokeWidth={2}
                     dot={false}
                   />
 
-                </LineChart>
+                </AreaChart>
 
               </ResponsiveContainer>
 
@@ -362,7 +390,9 @@ export default function RealtimeMonitoringSignalDashboard() {
                   key={index}
                   className="bg-[#020817] border border-slate-800 rounded-2xl p-4 flex items-center justify-between"
                 >
+
                   <div>
+
                     <div className="font-semibold">
                       {event}
                     </div>
@@ -370,9 +400,11 @@ export default function RealtimeMonitoringSignalDashboard() {
                     <div className="text-slate-500 text-sm mt-1">
                       Real-time monitoring event
                     </div>
+
                   </div>
 
                   <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
+
                 </div>
               ))}
 
@@ -387,6 +419,7 @@ export default function RealtimeMonitoringSignalDashboard() {
 function MetricCard({ title, value, subtitle }) {
   return (
     <div className="bg-[#08152b] border border-slate-800 rounded-3xl p-6">
+
       <div className="text-slate-400 text-sm">
         {title}
       </div>
@@ -398,6 +431,7 @@ function MetricCard({ title, value, subtitle }) {
       <div className="text-slate-500 mt-3 text-sm">
         {subtitle}
       </div>
+
     </div>
   );
 }
@@ -405,6 +439,7 @@ function MetricCard({ title, value, subtitle }) {
 function StatBox({ label, value }) {
   return (
     <div className="bg-[#0d1524] border border-slate-800 rounded-2xl p-4">
+
       <div className="text-slate-500 text-sm">
         {label}
       </div>
@@ -412,6 +447,7 @@ function StatBox({ label, value }) {
       <div className="text-4xl font-black mt-2">
         {value}
       </div>
+
     </div>
   );
 }
